@@ -1,0 +1,94 @@
+<div id="xor-network">
+  <style>
+    #xor-network {color:var(--foreground)}
+    #xor-network .network {display:block;width:100%;overflow:visible}
+    #xor-network .network text {fill:var(--foreground);font-weight:400}
+    #xor-network .edge {stroke:var(--border);stroke-width:1.5;fill:none}
+    #xor-network .edge.on {stroke:var(--viz-series-1)}
+    #xor-network .node {fill:var(--background);stroke:var(--border);stroke-width:1.5}
+    #xor-network .node.on {fill:color-mix(in srgb,var(--viz-series-1) 12%,var(--background));stroke:var(--viz-series-1)}
+    #xor-network .weight {paint-order:stroke;stroke:var(--background);stroke-width:6;stroke-linejoin:round}
+    #xor-network .calculations {display:grid;gap:12px;margin:12px 0}
+    #xor-network .calculation {display:flex;gap:12px;flex-wrap:wrap;align-items:baseline}
+    #xor-network .calculation strong {font-weight:500;min-width:75px}
+  </style>
+  <h3>XOR · 2 giriş → 2 gizli nöron → 1 çıkış</h3>
+  <div class="viz-controls" aria-label="Giriş çifti">
+    <span>x₁, x₂:</span>
+    <button class="btn" type="button" data-pair="00" aria-pressed="false">0, 0</button>
+    <button class="btn" type="button" data-pair="01" aria-pressed="false">0, 1</button>
+    <button class="btn" type="button" data-pair="10" aria-pressed="true">1, 0</button>
+    <button class="btn" type="button" data-pair="11" aria-pressed="false">1, 1</button>
+  </div>
+  <svg class="network" role="img" aria-label="XOR sinir ağı; her bağlantıda ağırlık, her nöronda bias ve aktivasyon değeri"></svg>
+  <div class="calculations tabular-nums" aria-live="polite"></div>
+  <div class="table-responsive">
+    <table class="table table-sm tabular-nums">
+      <thead><tr><th>x₁</th><th>x₂</th><th>z₁</th><th>h₁</th><th>z₂</th><th>h₂</th><th>z₃</th><th>ŷ</th><th>Hedef y</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+<script>
+(() => {
+  const root = document.getElementById('xor-network');
+  const svg = root.querySelector('.network');
+  const calc = root.querySelector('.calculations');
+  const buttons = [...root.querySelectorAll('[data-pair]')];
+  let pair = '10';
+  const f = n => String(n).replace('.', ',').replace('-', '−');
+  const step = z => z >= 0 ? 1 : 0;
+  function run(p) {
+    const x1 = +p[0], x2 = +p[1];
+    const z1 = x1 + x2 - .5, z2 = x1 + x2 - 1.5;
+    const h1 = step(z1), h2 = step(z2), z3 = h1 - 2*h2 - .5;
+    return {x1,x2,z1,z2,h1,h2,z3,y:step(z3)};
+  }
+  function draw() {
+    const v = run(pair), width = root.getBoundingClientRect().width || 700;
+    const narrow = width < 580, height = narrow ? 520 : 350;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('height', height);
+    const r = narrow ? 34 : 39;
+    const points = narrow
+      ? [[64,65],[width-64,65],[64,270],[width-64,270],[width/2,460]]
+      : [[58,100],[58,255],[width*.51,100],[width*.51,255],[width-65,178]];
+    const edges = [[0,2,'w₁₁ = +1',v.x1,.44],[1,2,'w₁₂ = +1',v.x2,.73],[0,3,'w₂₁ = +1',v.x1,.73],[1,3,'w₂₂ = +1',v.x2,.44],[2,4,'v₁ = +1',v.h1,.5],[3,4,'v₂ = −2',v.h2,.5]];
+    let markup = '<title>XOR ağı: OR ve AND gizli nöronları</title><desc>Gizli katmanda tüm giriş ağırlıkları bir. Bias değerleri eksi 0,5 ve eksi 1,5. Çıkış ağırlıkları bir ve eksi iki, çıkış biası eksi 0,5.</desc>';
+    edges.forEach(([a,b,label,on,t]) => {
+      const [ax,ay]=points[a], [bx,by]=points[b];
+      const len=Math.hypot(bx-ax,by-ay), dx=(bx-ax)/len,dy=(by-ay)/len;
+      const lx=ax+(bx-ax)*t, ly=ay+(by-ay)*t;
+      markup+=`<path class="edge ${on?'on':''}" d="M ${ax+dx*r} ${ay+dy*r} L ${bx-dx*(r+5)} ${by-dy*(r+5)}"/>`;
+      markup+=`<text class="weight text-small" x="${lx + (narrow && a===b-2 ? (a===0?38:-38):0)}" y="${ly-8}" text-anchor="middle">${label}</text>`;
+    });
+    const nodes = [ ['x₁',v.x1,''], ['x₂',v.x2,''], ['h₁ · OR',v.h1,'b₁ = −0,5'], ['h₂ · AND',v.h2,'b₂ = −1,5'], ['ŷ · XOR',v.y,'b₃ = −0,5'] ];
+    nodes.forEach(([name,val,bias],i)=>{
+      const [x,y]=points[i];
+      markup+=`<circle class="node ${val?'on':''}" cx="${x}" cy="${y}" r="${r}"/><text x="${x}" y="${y-7}" text-anchor="middle" class="text-small">${name}</text><text x="${x}" y="${y+15}" text-anchor="middle">${val}</text>`;
+      if(bias) markup+=`<text x="${x}" y="${y+r+21}" text-anchor="middle" class="text-small">${bias}</text>`;
+    });
+    svg.innerHTML=markup;
+    calc.innerHTML=`<div class="calculation"><strong>OR nöronu</strong><span>z₁ = 1×${v.x1} + 1×${v.x2} − 0,5 = ${f(v.z1)} → h₁ = ${v.h1}</span></div><div class="calculation"><strong>AND nöronu</strong><span>z₂ = 1×${v.x1} + 1×${v.x2} − 1,5 = ${f(v.z2)} → h₂ = ${v.h2}</span></div><div class="calculation"><strong>XOR çıkışı</strong><span>z₃ = 1×${v.h1} − 2×${v.h2} − 0,5 = ${f(v.z3)} → ŷ = ${v.y}</span></div>`;
+    buttons.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.pair===pair)));
+    root.querySelector('tbody').innerHTML=['00','01','10','11'].map(p=>{
+      const t=run(p),values=[t.x1,t.x2,t.z1,t.h1,t.z2,t.h2,t.z3,t.y,t.x1^t.x2];
+      return `<tr${p===pair?' style="background:var(--accent);color:var(--accent-foreground)"':''}>${values.map(n=>`<td>${f(n)}</td>`).join('')}</tr>`;
+    }).join('');
+  }
+  function restore(state) {
+    const p=state?.modelContent?.pair;
+    if(['00','01','10','11'].includes(p)) pair=p;
+    draw();
+  }
+  buttons.forEach(b=>b.addEventListener('click',()=>{
+    pair=b.dataset.pair;draw();
+    if(window.openai?.setWidgetState) window.openai.setWidgetState({modelContent:{pair},privateContent:null}).catch(()=>{});
+  }));
+  window.addEventListener('openai:set_globals',e=>{
+    if(e.detail?.globals?.widgetState) restore(e.detail.globals.widgetState);
+  });
+  new ResizeObserver(draw).observe(root);
+  restore(window.openai?.widgetState);
+})();
+</script>
